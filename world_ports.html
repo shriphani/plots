@@ -1,8 +1,13 @@
+<html>
+<body>
 <script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.3/d3.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/topojson/1.6.9/topojson.min.js"></script>
 <script src="/datamaps.world.min.js"></script>
-<div id="container" style="position: relative; height: 480px; width: 600px; display: inline-block;"></div>
-<div id="histogram" style="position: relative; height: 480px; width: 600px; display: inline-block;"></div>
+<script src="https://d3js.org/d3-color.v1.min.js"></script>
+<script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<div id="container" style="position: relative; height: 480px; width: 550px; display: inline-block;"></div>
+<div id="histogram" style="position: relative; height: 480px; width: 550px; display: inline-block;"></div>
 <script>
 var data;
 
@@ -27,6 +32,25 @@ var bubble_map = new Datamap({
     }
 });
 
+var maxcount = 0;
+d3.csv("ports.csv")
+.get(function (error, rows) {
+    for (var i in rows) {
+        if (maxcount < parseInt(rows[i]['Count'])) {
+            maxcount = parseInt(rows[i]['Count'])
+        }
+    }
+})
+
+d3.csv("ports.csv")
+.get(function (err, rows) {
+    for (var i in rows) {
+        var row = rows[i];
+        console.log(bubble_map);
+        bubble_map.options.fills[row['Rank']] = d3.interpolateSpectral(parseInt(row['Count'])/maxcount);
+    }
+})
+
 d3.csv("ports.csv")
 .row(function (row){
   return {
@@ -36,7 +60,7 @@ d3.csv("ports.csv")
     yield: row.Count,
     latitude: row.Lat,
     longitude: row.Lon,
-    fillKey: row.Rank,
+    fillKey: row['Rank'],
     id: row.Rank
   }
 })
@@ -54,3 +78,132 @@ d3.csv("ports.csv")
 });
 
 </script>
+<script>
+function renderChart() {
+
+var data = d3.csv.parse(d3.select('#csv').text());
+var valueLabelWidth = 40; // space reserved for value labels (right)
+var barHeight = 10; // height of one bar
+var barLabelWidth = 200; // space reserved for bar labels
+var barLabelPadding = 5; // padding between bar and bar labels (left)
+var gridLabelHeight = 18; // space reserved for gridline labels
+var gridChartOffset = 3; // space between start of grid and first bar
+var maxBarWidth = 300; // width of the bar with the max value
+
+// accessor functions
+var barLabel = function(d) { return d['Port'].replace('Port of', '') + ', ' + d['Country']; };
+var barValue = function(d) { return parseFloat(d['Count']); };
+
+// scales
+var yScale = d3.scale.ordinal().domain(d3.range(0, data.length)).rangeBands([0, data.length * barHeight]);
+var y = function(d, i) { return yScale(i); };
+var yText = function(d, i) { return y(d, i) + yScale.rangeBand() / 2; };
+var x = d3.scale.linear().domain([0, d3.max(data, barValue)]).range([0, maxBarWidth]);
+// svg container element
+var chart = d3.select('#histogram').append("svg")
+.attr('width', maxBarWidth + barLabelWidth + valueLabelWidth)
+.attr('height', gridLabelHeight + gridChartOffset + data.length * barHeight);
+
+
+// bar labels
+var labelsContainer = chart.append('g')
+.attr('transform', 'translate(' + (barLabelWidth - barLabelPadding) + ',' + (gridLabelHeight + gridChartOffset) + ')');
+labelsContainer.selectAll('text').data(data).enter().append('text')
+.attr('y', yText)
+.attr('stroke', 'none')
+.attr('fill', 'black')
+.attr("dy", ".35em") // vertical-align: middle
+.attr('text-anchor', 'end')
+.text(barLabel)
+.style("font-size", "12px");
+// bars
+console.log(data);
+var maxcount = 0;
+for (var i in data) {
+if (maxcount < parseInt(data[i]['Count'])) {
+    maxcount = parseInt(data[i]['Count'])
+}
+}
+console.log('maxcount ' + maxcount);
+var barsContainer = chart.append('g')
+.attr('transform', 'translate(' + barLabelWidth + ',' + (gridLabelHeight + gridChartOffset) + ')');
+barsContainer.selectAll("rect").data(data).enter().append("rect")
+.attr('y', y)
+.attr('height', yScale.rangeBand())
+.attr('width', function(d) { return x(barValue(d)); })
+.attr('stroke', 'white')
+.attr('fill', function (d) {
+  var scr = parseInt(d['Count'])/maxcount;
+  console.log(scr);
+  return d3.interpolateSpectral(scr);
+});
+// bar value labels
+barsContainer.selectAll("text").data(data).enter().append("text")
+.attr("x", function(d) { return x(barValue(d)); })
+.attr("y", yText)
+.attr("dx", 3) // padding-left
+.attr("dy", ".35em") // vertical-align: middle
+.attr("text-anchor", "start") // text-align: right
+.attr("fill", "black")
+.attr("stroke", "none")
+.style("font-size", "12px")
+.text(function(d) { return d3.round(barValue(d), 2); });
+// start line
+barsContainer.append("line")
+.attr("y1", -gridChartOffset)
+.attr("y2", yScale.rangeExtent()[1] + gridChartOffset)
+.style("stroke", "#000")
+.style("font-size", "12px");
+
+}
+</script>
+<script id="csv" type="text/csv">Rank,Port,Country,Count,Lat,Lon
+1,Port of Miami,United States,4850000,25.774167,-80.171111
+2,Port Everglades,United States,4160000,26.086022,-80.115286
+3,Port Canaveral,United States,4001000,28.4105901,-80.6254973
+4,Port of Nassau,The Bahamas,3412000,25.066667,-77.333333
+5,Port of Cozumel,Mexico,2700000,20.416667,-86.916667
+6,Port of Barcelona,Spain,2364292,41.383333,2.183333
+7,Port of Civitavecchia,Italy,2140039,42.091949,11.790819
+8,Port of The Virgin Islands,United States,2083890,18.35,-64.95
+9,Port of Saint Martin,France,2000864,18.05,-63.05
+10,Port of Venice,Italy,1733839,45.4304,12.3233
+11,Port of The Balearic Islands,Spain,1587064,39.5,3
+12,Port of Southampton,United Kingdom,1529000,50.8965,1.3968
+13,Port of Marseille,France,1311284,43.2031,5.201
+14,Port of Naples,Italy,1113762,40.8333,14.2667
+15,Port of Piraeus,Greece,1055556,37.9406,23.6333
+16,Port de Genoa,Italy,1051015,44.4028,8.9167
+17,Port of Savona,Italy,1018794,44.3077,8.4848
+18,Port of New Orleans,United States,1014325,29.9447608,-90.0645926
+19,Port of Galveston,United States,901000,29.3045067,-94.8158577
+20,Port of Dubrovnik,Croatia,894216,42.640278,18.108333
+21,Port of Tenerife,Spain,848159,28.268611,-16.605556
+22,Port of Copenhagen,Denmark,840000,55.6718,12.5817
+23,Port of Seattle,United States,823780,47.5356103,-122.4827577
+24,Port Metro Vancouver,Canada,812398,49.2891741,-123.1117392
+25,Port of Corfu,Greece,744651,39.583333,19.866667
+26,Port of Kusadasi,Turkey,583459,37.859722,27.259722
+27,Port of Lisbon,Portugal,559434,38.676819,-9.172246
+28,Port of Los Angeles,United States,578668,33.7291858,-118.2620150
+29,Port of Tunis,Tunisia,560000,36.8,10.183333
+30,Port of Hamburg,Germany,552459,53.538882,9.946122
+31,Port of Saint Petersburg,Russia,523525,59.8776345,30.1787462
+32,Port of Tallinn,Estonia,519319,59.4500126,24.7284538
+33,Port of Bergen,Norway,442759,60.4136376,5.2780296
+34,Port of Helsinki,Finland,420000,60.1616112,24.9555696
+35,Port of Malaga,Spain,418320,36.7086386,-4.430323
+36,Port of Valencia,Spain,379732,39.4480843,-0.3256815
+37,Port of Nouméa,France,351400,-22.2867414,166.4540321
+38,Port of Ajaccio,France,302700,41.9246934,8.7324595
+39,Port of Oslo,Norway,298000,59.9040303,10.7359245
+40,Port of Villefranche-sur-Mer,France,296100,43.6985178,7.2995567
+41,Port of Toulon,France,278000,43.1175757,5.9283118
+42,Port of Casablanca,Morocco,198140,33.6037308,-7.5987016
+43,Port of Quebec,Canada,180836,46.821072,-71.2153655
+44,St Peter Port,Guernsey,123000,49.4539319,-2.5801741
+45,Port of Montreal,Canada,92000,45.5109411,-73.5508936
+</script>
+<script>renderChart();</script>
+</body>
+</html>
